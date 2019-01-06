@@ -1,6 +1,6 @@
 //! provides a NetWorker implementation for backend IPC p2p connections
 
-use p2p_config::P2pIpcConfig;
+use holochain_core_types::json::JsonString;
 
 use holochain_net_ipc::{
     ipc_client::IpcClient,
@@ -18,6 +18,8 @@ use holochain_net_connection::{
 };
 
 use std::{collections::HashMap, convert::TryFrom, io::Read, sync::mpsc};
+
+use serde_json;
 
 /// a p2p net worker
 pub struct IpcNetWorker {
@@ -96,42 +98,55 @@ impl IpcNetWorker {
         )
     }
 
-    pub fn new(handler: NetHandler, config: P2pIpcConfig) -> NetResult<Self> {
-        if config.socket_type != "zmq" {
-            bail!("unexpected socketType: {}", config.socket_type);
+    pub fn new(handler: NetHandler, config: &JsonString) -> NetResult<Self> {
+        let config: serde_json::Value = serde_json::from_str(config.into())?;
+        if config["socketType"] != "zmq" {
+            bail!("unexpected socketType: {}", config["socketType"]);
         }
-        let block_connect = config.block_connect.unwrap_or(true);
-        match config.ipc_uri {
-            None => {
-                if let Some(s) = config.spawn {
-                    let env: HashMap<String, String> = s
-                        .env
+        let block_connect = config["blockConnect"].as_bool().unwrap_or(true);
+        if config["ipcUri"].as_str().is_none() {
+            if let Some(s) = config["spawn"].as_object() {
+                if s["cmd"].is_string()
+                    && s["args"].is_array()
+                    && s["workDir"].is_string()
+                    && s["env"].is_object()
+                {
+                    let env: HashMap<String, String> = s["env"]
+                        .as_object()
+                        .unwrap()
                         .iter()
-                        .map(|(k, v)| (k.to_string(), v.to_string()))
+                        .map(|(k, v)| (k.to_string(), v.as_str().unwrap().to_string()))
                         .collect();
                     return IpcNetWorker::priv_spawn(
                         handler,
-                        s.cmd,
-                        s.args.iter().map(|i| i.to_string()).collect(),
-                        s.work_dir,
+                        s["cmd"].as_str().unwrap().to_string(),
+                        s["args"]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .map(|i| i.as_str().unwrap_or_default().to_string())
+                            .collect(),
+                        s["workDir"].as_str().unwrap().to_string(),
                         env,
                         block_connect,
                     );
                 } else {
-                    bail!("config.ipcUri is required");
+                    bail!("config.spawn requires 'cmd', 'args', 'workDir', and 'env'");
                 }
             }
-            Some(uri) => IpcNetWorker::priv_new(
-                handler,
-                Box::new(move |h| {
-                    let mut socket = ZmqIpcSocket::new()?;
-                    socket.connect(&uri)?;
-                    let out: Box<NetWorker> = Box::new(IpcClient::new(h, socket, block_connect)?);
-                    Ok(out)
-                }),
-                None,
-            ),
+            bail!("config.ipcUri is required");
         }
+        let uri = config["ipcUri"].as_str().unwrap().to_string();
+        IpcNetWorker::priv_new(
+            handler,
+            Box::new(move |h| {
+                let mut socket = ZmqIpcSocket::new()?;
+                socket.connect(&uri)?;
+                let out: Box<NetWorker> = Box::new(IpcClient::new(h, socket, block_connect)?);
+                Ok(out)
+            }),
+            None,
+        )
     }
 
     // -- private -- //
@@ -305,12 +320,12 @@ mod tests {
     fn it_ipc_networker_zmq_create() {
         IpcNetWorker::new(
             Box::new(|_r| Ok(())),
-            serde_json::from_value(json!({
+            &json!({
                 "socketType": "zmq",
                 "ipcUri": "tcp://127.0.0.1:0",
                 "blockConnect": false
-            }))
-            .unwrap(),
+            })
+            .into(),
         )
         .unwrap();
     }
@@ -319,7 +334,7 @@ mod tests {
     fn it_ipc_networker_spawn() {
         if let Err(e) = IpcNetWorker::new(
             Box::new(|_r| Ok(())),
-            serde_json::from_value(json!({
+            &json!({
                 "socketType": "zmq",
                 "spawn": {
                     "cmd": "cargo",
@@ -328,8 +343,8 @@ mod tests {
                     "env": {}
                 },
                 "blockConnect": false
-            }))
-            .unwrap(),
+            })
+            .into(),
         ) {
             let e = format!("{:?}", e);
             assert!(e.contains("Invalid argument"), "res: {}", e);
