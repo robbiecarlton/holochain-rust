@@ -75,6 +75,7 @@ fn make_config(network_name: String, instance_data: Vec<InstanceData>) -> Config
         instances: instance_configs,
         interfaces: Vec::new(),
         bridges: Vec::new(),
+        ..Default::default()
     };
     config
 }

@@ -311,6 +311,7 @@ pub mod tests {
             state::{ActionResponse, AgentState},
         },
         context::{mock_network_config, Context},
+        logger::{test_logger, TestLogger},
     };
     use futures::executor::block_on;
     use holochain_cas_implementations::{cas::file::FilesystemStorage, eav::file::EavFileStorage};
@@ -324,7 +325,6 @@ pub mod tests {
     };
 
     use crate::{
-        logger::Logger,
         network::actions::initialize_network::initialize_network,
         nucleus::{
             actions::initialize::initialize_application,
@@ -344,26 +344,6 @@ pub mod tests {
     };
 
     use holochain_core_types::entry::Entry;
-
-    #[derive(Clone, Debug)]
-    pub struct TestLogger {
-        pub log: Vec<String>,
-    }
-
-    impl Logger for TestLogger {
-        fn log(&mut self, msg: String) {
-            self.log.push(msg);
-        }
-        fn dump(&self) -> String {
-            format!("{:?}", self.log)
-        }
-    }
-
-    /// create a test logger
-    #[cfg_attr(tarpaulin, skip)]
-    pub fn test_logger() -> Arc<Mutex<TestLogger>> {
-        Arc::new(Mutex::new(TestLogger { log: Vec::new() }))
-    }
 
     /// create a test context and TestLogger pair so we can use the logger in assertions
     #[cfg_attr(tarpaulin, skip)]
