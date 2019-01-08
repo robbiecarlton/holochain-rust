@@ -18,7 +18,7 @@ const promiser = (fulfill, reject) => (err, val) => {
 /////////////////////////////////////////////////////////////
 
 const Config = {
-    agent: name => ({ name }),
+    agent: (name) => ({ name }),
     dna: (path) => ({ path }),
     instance: (agent, dna, name) => {
         if (!name) {
@@ -26,7 +26,11 @@ const Config = {
         }
         return { agent, dna, name }
     },
-    container: (instances, networkName="nodejs-config-default-mock") => makeConfig(networkName, instances),
+    container: (instances) => makeConfig(instances, defaultOpts),
+}
+
+const defaultOpts = {
+    debugLog: false
 }
 
 /////////////////////////////////////////////////////////////
@@ -90,12 +94,9 @@ Container.prototype.makeCaller = function (agentId, dnaPath) {
 }
 
 Container.withInstances = function (...instances) {
-    const networkName = `auto-mock-network-${this._nextMock++}`
-    const config = makeConfig(networkName, instances)
+    const config = makeConfig(instances, defaultOpts)
     return new Container(config)
 }
-// counter to give a unique mock network name for each new Container
-Container._nextMock = 1
 
 /////////////////////////////////////////////////////////////
 
